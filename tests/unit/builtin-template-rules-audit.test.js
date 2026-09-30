@@ -164,6 +164,40 @@ describe('Builtin template rule audit', () => {
         }
     });
 
+    it('omits unsupported REALITY spider_x from sing-box outbounds while keeping supported keys', () => {
+        const singbox = JSON.parse(
+            renderSingboxFromTemplateModel({
+                proxies: [
+                    {
+                        name: 'VLESS Reality',
+                        type: 'vless',
+                        server: 'reality.example.com',
+                        port: 443,
+                        uuid: '11111111-1111-1111-1111-111111111111',
+                        tls: true,
+                        sni: 'example.com',
+                        'reality-opts': {
+                            'public-key': 'public-key',
+                            'short-id': 'abcd',
+                            'spider-x': '/ignored',
+                        },
+                    },
+                ],
+                groups: [],
+                rules: [],
+            })
+        );
+        const reality = singbox.outbounds.find((outbound) => outbound.tag === 'VLESS Reality')?.tls
+            ?.reality;
+
+        expect(reality).toEqual({
+            enabled: true,
+            public_key: 'public-key',
+            short_id: 'abcd',
+        });
+        expect(JSON.stringify(singbox)).not.toContain('spider_x');
+    });
+
     it('uses maintained SagerNet sing-box binary rule sets instead of deprecated Loyalsoldier JSON rules', () => {
         const rawRules = getBuiltinRules('FULL', 'singbox');
         const providers = getRemoteProviderDefinitions('singbox', rawRules);

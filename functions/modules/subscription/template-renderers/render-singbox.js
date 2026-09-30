@@ -163,9 +163,6 @@ function buildOutbound(proxy) {
                     public_key: realityOpts['public-key'] || realityOpts.publicKey || '',
                     short_id: realityOpts['short-id'] || realityOpts.shortId || '',
                 };
-                if (realityOpts['spider-x'] || realityOpts.spiderX) {
-                    outbound.tls.reality.spider_x = realityOpts['spider-x'] || realityOpts.spiderX;
-                }
             }
         }
         return outbound;
