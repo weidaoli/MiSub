@@ -198,6 +198,26 @@ describe('Builtin template rule audit', () => {
         expect(JSON.stringify(singbox)).not.toContain('spider_x');
     });
 
+    it('only emits default on selector outbounds, not urltest outbounds', () => {
+        const singbox = JSON.parse(
+            renderSingboxFromTemplateModel({
+                proxies: [],
+                groups: [
+                    { name: 'Auto', type: 'url-test', members: ['node-a', 'node-b'] },
+                    { name: 'Select', type: 'select', members: ['node-a', 'node-b'] },
+                ],
+                rules: [],
+            })
+        );
+        const urltest = singbox.outbounds.find((outbound) => outbound.tag === 'Auto');
+        const selector = singbox.outbounds.find((outbound) => outbound.tag === 'Select');
+
+        expect(urltest.type).toBe('urltest');
+        expect(urltest.default).toBeUndefined();
+        expect(selector.type).toBe('selector');
+        expect(selector.default).toBe('node-a');
+    });
+
     it('uses maintained SagerNet sing-box binary rule sets instead of deprecated Loyalsoldier JSON rules', () => {
         const rawRules = getBuiltinRules('FULL', 'singbox');
         const providers = getRemoteProviderDefinitions('singbox', rawRules);

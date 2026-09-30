@@ -260,7 +260,7 @@ function buildGroupOutbounds(groups) {
             outbound.interval = `${group.options?.interval || 300}s`;
         }
 
-        if (outbound.outbounds.length > 0) {
+        if (mappedType === 'selector' && outbound.outbounds.length > 0) {
             outbound.default = outbound.outbounds[0];
         }
 
