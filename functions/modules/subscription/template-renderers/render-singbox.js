@@ -238,34 +238,53 @@ function mapGroupType(type) {
     return 'selector';
 }
 
-function buildGroupOutbounds(groups) {
-    return groups.map((group) => {
-        const mappedType = mapGroupType(group.type);
-        const rawMembers = Array.isArray(group.members) ? group.members.filter(Boolean) : [];
-        const outbound = {
-            tag: sanitizeTag(group.name),
-            type: mappedType,
-            outbounds: ['urltest'].includes(mappedType)
-                ? rawMembers.filter(
-                      (member) =>
-                          !['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS'].includes(
-                              String(member).toUpperCase()
-                          )
-                  )
-                : rawMembers,
-        };
+function buildGroupOutbounds(groups, availableTargets) {
+    const validTargets = new Set(availableTargets);
+    const hasUsableMember = (group, member) => {
+        if (!validTargets.has(member)) return false;
+        if (mapGroupType(group.type) !== 'urltest') return true;
+        return !['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS'].includes(String(member).toUpperCase());
+    };
 
-        if (mappedType === 'urltest') {
-            outbound.url = group.options?.url || 'http://www.gstatic.com/generate_204';
-            outbound.interval = `${group.options?.interval || 300}s`;
-        }
+    let changed = true;
+    while (changed) {
+        changed = false;
+        groups.forEach((group) => {
+            const members = Array.isArray(group.members) ? group.members.filter(Boolean) : [];
+            if (
+                !validTargets.has(group.name) &&
+                members.some((member) => hasUsableMember(group, member))
+            ) {
+                validTargets.add(group.name);
+                changed = true;
+            }
+        });
+    }
 
-        if (mappedType === 'selector' && outbound.outbounds.length > 0) {
-            outbound.default = outbound.outbounds[0];
-        }
+    return groups
+        .map((group) => {
+            const mappedType = mapGroupType(group.type);
+            const members = Array.isArray(group.members)
+                ? group.members.filter((member) => hasUsableMember(group, member))
+                : [];
+            const outbound = {
+                tag: sanitizeTag(group.name),
+                type: mappedType,
+                outbounds: members,
+            };
 
-        return outbound;
-    });
+            if (mappedType === 'urltest') {
+                outbound.url = group.options?.url || 'http://www.gstatic.com/generate_204';
+                outbound.interval = `${group.options?.interval || 300}s`;
+            }
+
+            if (mappedType === 'selector') {
+                outbound.default = members[0];
+            }
+
+            return outbound;
+        })
+        .filter((outbound) => outbound.outbounds.length > 0);
 }
 
 function mapRuleToSingbox(rule) {
@@ -377,18 +396,34 @@ export function renderSingboxFromTemplateModel(model, options = {}) {
             ? normalizedModel.proxies
             : urlsToClashProxies(proxyUrls);
     const proxyOutbounds = proxies.map(buildOutbound).filter(Boolean);
+    const outputTargets = new Set([
+        ...proxyOutbounds.map((outbound) => outbound.tag),
+        'DIRECT',
+        'REJECT',
+    ]);
     const groupOutbounds = buildGroupOutbounds(
-        normalizedModel.groups.filter((g) => Array.isArray(g.members) && g.members.length > 0)
+        normalizedModel.groups.filter((g) => Array.isArray(g.members) && g.members.length > 0),
+        outputTargets
     );
+    const availableOutboundTags = new Set([
+        ...proxyOutbounds.map((outbound) => outbound.tag),
+        ...groupOutbounds.map((outbound) => outbound.tag),
+        'DIRECT',
+        'REJECT',
+    ]);
     const ruleSetObjects = [
         getSingboxDnsRuleSet(),
         ...buildRuleSets(normalizedModel.rules).filter(
             (ruleSet) => ruleSet.tag !== SINGBOX_CN_RULE_SET
         ),
     ];
-    const routeRules = normalizedModel.rules.map(mapRuleToSingbox).filter(Boolean);
+    const routeRules = normalizedModel.rules
+        .map(mapRuleToSingbox)
+        .filter((rule) => rule && availableOutboundTags.has(rule.outbound));
     const defaultOutbound =
-        normalizedModel.groups.find((group) => group.name !== DNS_PROXY_GROUP)?.name || 'DIRECT';
+        normalizedModel.groups.find(
+            (group) => group.name !== DNS_PROXY_GROUP && availableOutboundTags.has(group.name)
+        )?.name || 'DIRECT';
     const dnsConfig = buildSingboxDnsConfig(normalizedModel.settings?.customDnsOverride, {
         mode: normalizedModel.settings?.dnsMode,
         proxyGroup: DNS_PROXY_GROUP,

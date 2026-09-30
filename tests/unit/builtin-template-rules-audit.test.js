@@ -201,10 +201,19 @@ describe('Builtin template rule audit', () => {
     it('only emits default on selector outbounds, not urltest outbounds', () => {
         const singbox = JSON.parse(
             renderSingboxFromTemplateModel({
-                proxies: [],
+                proxies: [
+                    {
+                        name: 'node-a',
+                        type: 'ss',
+                        server: 'node.example.com',
+                        port: 8388,
+                        cipher: 'aes-128-gcm',
+                        password: 'test-password',
+                    },
+                ],
                 groups: [
-                    { name: 'Auto', type: 'url-test', members: ['node-a', 'node-b'] },
-                    { name: 'Select', type: 'select', members: ['node-a', 'node-b'] },
+                    { name: 'Auto', type: 'url-test', members: ['node-a', 'missing-node'] },
+                    { name: 'Select', type: 'select', members: ['Auto', 'missing-node'] },
                 ],
                 rules: [],
             })
@@ -213,9 +222,11 @@ describe('Builtin template rule audit', () => {
         const selector = singbox.outbounds.find((outbound) => outbound.tag === 'Select');
 
         expect(urltest.type).toBe('urltest');
+        expect(urltest.outbounds).toEqual(['node-a']);
         expect(urltest.default).toBeUndefined();
         expect(selector.type).toBe('selector');
-        expect(selector.default).toBe('node-a');
+        expect(selector.outbounds).toEqual(['Auto']);
+        expect(selector.default).toBe('Auto');
     });
 
     it('uses maintained SagerNet sing-box binary rule sets instead of deprecated Loyalsoldier JSON rules', () => {

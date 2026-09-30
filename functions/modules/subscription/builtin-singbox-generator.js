@@ -38,6 +38,32 @@ function parsePort(port) {
     return Number.isFinite(num) ? num : undefined;
 }
 
+export function pruneSingboxGroupDependencies(groups, outboundTags) {
+    const validTargets = new Set([...outboundTags, 'DIRECT', 'REJECT']);
+    let changed = true;
+
+    while (changed) {
+        changed = false;
+        groups.forEach((group) => {
+            if (
+                !validTargets.has(group.tag) &&
+                group.outbounds.some((member) => validTargets.has(member))
+            ) {
+                validTargets.add(group.tag);
+                changed = true;
+            }
+        });
+    }
+
+    return groups
+        .filter((group) => validTargets.has(group.tag))
+        .map((group) => ({
+            ...group,
+            outbounds: group.outbounds.filter((member) => validTargets.has(member)),
+        }))
+        .filter((group) => group.outbounds.length > 0);
+}
+
 function buildOutbound(proxy) {
     if (!proxy || !proxy.server || !proxy.port) return null;
 
@@ -333,24 +359,27 @@ export function generateBuiltinSingboxConfig(nodeList, options = {}) {
     }
 
     // 将抽象分组转换为 Sing-Box Outbounds
-    const groupOutbounds = proxyGroups.map((group) => {
-        let type = 'selector';
-        if (group.type === 'url-test') type = 'urltest';
-        if (group.type === 'fallback') type = 'urltest'; // Sing-Box 暂时映射为 urltest
+    const groupOutbounds = pruneSingboxGroupDependencies(
+        proxyGroups.map((group) => {
+            let type = 'selector';
+            if (group.type === 'url-test') type = 'urltest';
+            if (group.type === 'fallback') type = 'urltest'; // Sing-Box 暂时映射为 urltest
 
-        return {
-            tag: group.name,
-            type: type,
-            outbounds: group.proxies,
-            ...(type === 'urltest'
-                ? {
-                      url: 'http://www.gstatic.com/generate_204',
-                      interval: '10m',
-                      tolerance: 50,
-                  }
-                : {}),
-        };
-    });
+            return {
+                tag: group.name,
+                type: type,
+                outbounds: group.proxies,
+                ...(type === 'urltest'
+                    ? {
+                          url: 'http://www.gstatic.com/generate_204',
+                          interval: '10m',
+                          tolerance: 50,
+                      }
+                    : {}),
+            };
+        }),
+        outbounds.map((outbound) => outbound.tag)
+    );
 
     // 从统一规则库获取分流规则
     const rawRules = getBuiltinRules(levelKey, 'singbox');
