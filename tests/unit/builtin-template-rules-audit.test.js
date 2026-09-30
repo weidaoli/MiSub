@@ -286,6 +286,9 @@ describe('Builtin template rule audit', () => {
             'https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@0adeef8a3b9201292f6786ef4de81bcc02e971eb/geosite-category-ads-all.srs'
         );
         expect(providers.ADS.url).not.toContain('raw.githubusercontent.com');
+        expect(
+            Object.values(providers).every((provider) => provider.download_detour === 'DIRECT')
+        ).toBe(true);
     });
 
     it('emits sing-box ADS rule set as binary SRS in builtin config', () => {
@@ -301,10 +304,60 @@ describe('Builtin template rule audit', () => {
             format: 'binary',
             url: 'https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@0adeef8a3b9201292f6786ef4de81bcc02e971eb/geosite-category-ads-all.srs',
         });
-        expect(adsRuleSet.download_detour).toBeUndefined();
+        expect(adsRuleSet.download_detour).toBe('DIRECT');
+        expect(parsed.route.rule_set.every((ruleSet) => ruleSet.download_detour === 'DIRECT')).toBe(
+            true
+        );
+    });
+
+    it('maps built-in Clash text rules to binary SRS and downloads them directly', () => {
+        const model = getOptimizedTemplateModel('clash_misub_media_ai');
+        model.rules.push({
+            type: 'rule-set',
+            value: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/ProxyMedia.list',
+            policy: '🎥 奈飞视频',
+            source: 'remote',
+        });
+        const singbox = JSON.parse(renderSingboxFromTemplateModel(model));
+        const urls = singbox.route.rule_set.map((ruleSet) => ruleSet.url);
+
+        expect(urls).toContain(
+            'https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@0adeef8a3b9201292f6786ef4de81bcc02e971eb/geosite-category-media.srs'
+        );
+        expect(urls).toContain(
+            'https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@0adeef8a3b9201292f6786ef4de81bcc02e971eb/geosite-telegram.srs'
+        );
+        expect(urls).toContain(
+            'https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@0adeef8a3b9201292f6786ef4de81bcc02e971eb/geosite-cn.srs'
+        );
         expect(
-            parsed.route.rule_set.every((ruleSet) => ruleSet.download_detour === undefined)
+            singbox.route.rule_set.every(
+                (ruleSet) => ruleSet.format === 'binary' && ruleSet.download_detour === 'DIRECT'
+            )
         ).toBe(true);
+        expect(urls.every((url) => !/\.(?:list|ya?ml)(?:$|\?)/i.test(url))).toBe(true);
+    });
+
+    it('drops unsupported remote text rules without leaving dangling rule-set references', () => {
+        const unsupportedUrl = 'https://example.com/custom-rules.list';
+        const singbox = JSON.parse(
+            renderSingboxFromTemplateModel({
+                proxies: [],
+                groups: [],
+                rules: [
+                    {
+                        type: 'rule-set',
+                        value: unsupportedUrl,
+                        policy: 'DIRECT',
+                        source: 'remote',
+                    },
+                ],
+            })
+        );
+        const danglingTag = `DIRECT_${unsupportedUrl}`;
+
+        expect(singbox.route.rule_set.some((ruleSet) => ruleSet.tag === danglingTag)).toBe(false);
+        expect(singbox.route.rules.some((rule) => rule.rule_set === danglingTag)).toBe(false);
     });
 
     it('applies the local-only listener and split-DNS baseline to template outputs', () => {

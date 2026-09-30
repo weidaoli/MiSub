@@ -477,6 +477,42 @@ const ACL4SSR_BASE = `https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/${PINNED
 const SING_GEOSITE_BASE = `https://raw.githubusercontent.com/SagerNet/sing-geosite/${PINNED_RULE_REVISIONS.SING_GEOSITE}`;
 const SING_GEOIP_BASE = `https://raw.githubusercontent.com/SagerNet/sing-geoip/${PINNED_RULE_REVISIONS.SING_GEOIP}`;
 
+const SINGBOX_TEMPLATE_RULE_MAP = Object.freeze({
+    'proxymedia.list': 'geosite-category-media.srs',
+    'telegram.list': 'geosite-telegram.srs',
+    'chinadomain.list': 'geosite-cn.srs',
+    'localareanetwork.list': 'geosite-private.srs',
+    'banad.list': 'geosite-category-ads-all.srs',
+    'youtube.list': 'geosite-youtube.srs',
+    'netflix.list': 'geosite-netflix.srs',
+    'proxygfwlist.list': 'geosite-geolocation-!cn.srs',
+    'openai.list': 'geosite-openai.srs',
+    'claude.list': 'geosite-anthropic.srs',
+    'steam.list': 'geosite-steam.srs',
+    'epic.list': 'geosite-epicgames.srs',
+    'sony.list': 'geosite-sony.srs',
+});
+
+/**
+ * 将模板里常见的 Clash 文本规则映射到 Sing-Box 可直接读取的 SRS。
+ * 未知的 .list/.yaml 不能冒充 Sing-Box source JSON，否则会在启动阶段解析失败。
+ */
+export function resolveSingboxRuleSetUrl(sourceUrl) {
+    const raw = String(sourceUrl || '').trim();
+    if (!/^https?:\/\//i.test(raw)) return null;
+
+    try {
+        const url = new URL(raw);
+        const fileName = decodeURIComponent(url.pathname.split('/').pop() || '').toLowerCase();
+        if (fileName.endsWith('.srs')) return pinRemoteRuleUrl(raw);
+
+        const mappedFile = SINGBOX_TEMPLATE_RULE_MAP[fileName];
+        return mappedFile ? pinRemoteRuleUrl(`${SING_GEOSITE_BASE}/${mappedFile}`) : null;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * 将 raw.githubusercontent.com 链接重写为 jsDelivr CDN 镜像。
  *
@@ -732,15 +768,14 @@ export function getRemoteProviderDefinitions(format, ruleLines) {
                 interval: 86400,
             };
         } else if (format === 'singbox' || format === 'sing-box') {
+            const ruleSetUrl = resolveSingboxRuleSetUrl(source.singbox);
+            if (!ruleSetUrl) return;
             providers[tag] = {
                 tag: tag,
                 type: 'remote',
-                format: String(source.singbox || '')
-                    .toLowerCase()
-                    .endsWith('.srs')
-                    ? 'binary'
-                    : 'source',
-                url: pinRemoteRuleUrl(source.singbox),
+                format: 'binary',
+                url: ruleSetUrl,
+                download_detour: 'DIRECT',
                 update_interval: '24h',
             };
         }

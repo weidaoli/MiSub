@@ -1,7 +1,11 @@
 import { urlsToClashProxies } from '../../../utils/url-to-clash.js';
 import { normalizeUnifiedTemplateModel } from '../template-model.js';
 import { buildSingboxDnsConfig, DNS_PROXY_GROUP, SINGBOX_CN_RULE_SET } from '../safe-dns.js';
-import { getSingboxDnsRuleSet, pinRemoteRuleUrl } from '../builtin-rules-provider.js';
+import {
+    getSingboxDnsRuleSet,
+    pinRemoteRuleUrl,
+    resolveSingboxRuleSetUrl,
+} from '../builtin-rules-provider.js';
 
 function sanitizeTag(value) {
     return String(value || '').trim() || 'Untitled';
@@ -343,27 +347,25 @@ function mapRuleToSingbox(rule) {
     return null;
 }
 
-function detectRuleSetFormat(url) {
-    const raw = String(url || '')
-        .trim()
-        .toLowerCase();
-    if (!raw) return 'source';
-    return raw.endsWith('.srs') ? 'binary' : 'source';
-}
-
 function buildRuleSets(rules) {
     const remoteRuleSets = rules
         .filter(
             (rule) =>
                 String(rule.type || '').toLowerCase() === 'rule-set' && rule.source === 'remote'
         )
-        .map((rule) => ({
-            tag: sanitizeTag(`${rule.policy}_${rule.value}`),
-            type: 'remote',
-            format: detectRuleSetFormat(rule.value),
-            url: pinRemoteRuleUrl(rule.value),
-            update_interval: '24h',
-        }));
+        .map((rule) => {
+            const url = resolveSingboxRuleSetUrl(rule.value);
+            if (!url) return null;
+            return {
+                tag: sanitizeTag(`${rule.policy}_${rule.value}`),
+                type: 'remote',
+                format: 'binary',
+                url,
+                download_detour: 'DIRECT',
+                update_interval: '24h',
+            };
+        })
+        .filter(Boolean);
 
     const implicitRuleSets = [];
     const seen = new Set();
@@ -387,6 +389,7 @@ function buildRuleSets(rules) {
                             : pinRemoteRuleUrl(
                                   `https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-${value}.srs`
                               ),
+                    download_detour: 'DIRECT',
                     update_interval: '24h',
                 });
             }
@@ -429,9 +432,18 @@ export function renderSingboxFromTemplateModel(model, options = {}) {
             (ruleSet) => ruleSet.tag !== SINGBOX_CN_RULE_SET
         ),
     ];
+    const availableRuleSetTags = new Set(ruleSetObjects.map((ruleSet) => ruleSet.tag));
     const routeRules = normalizedModel.rules
         .map(mapRuleToSingbox)
-        .filter((rule) => rule && availableOutboundTags.has(rule.outbound));
+        .filter(
+            (rule) =>
+                rule &&
+                availableOutboundTags.has(rule.outbound) &&
+                (!rule.rule_set ||
+                    (Array.isArray(rule.rule_set)
+                        ? rule.rule_set.every((tag) => availableRuleSetTags.has(tag))
+                        : availableRuleSetTags.has(rule.rule_set)))
+        );
     const defaultOutbound =
         normalizedModel.groups.find(
             (group) => group.name !== DNS_PROXY_GROUP && availableOutboundTags.has(group.name)
