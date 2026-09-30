@@ -198,6 +198,43 @@ describe('Builtin template rule audit', () => {
         expect(JSON.stringify(singbox)).not.toContain('spider_x');
     });
 
+    it('filters loopback subscription-info placeholders from template sing-box output', () => {
+        const singbox = JSON.parse(
+            renderSingboxFromTemplateModel({
+                proxies: [
+                    {
+                        name: 'Traffic Remaining',
+                        type: 'trojan',
+                        server: '127.0.0.1',
+                        port: 443,
+                        password: 'placeholder',
+                    },
+                    {
+                        name: 'node-a',
+                        type: 'ss',
+                        server: 'node.example.com',
+                        port: 8388,
+                        cipher: 'aes-128-gcm',
+                        password: 'test-password',
+                    },
+                ],
+                groups: [
+                    {
+                        name: 'Auto',
+                        type: 'url-test',
+                        members: ['Traffic Remaining', 'node-a'],
+                    },
+                ],
+                rules: [],
+            })
+        );
+
+        expect(singbox.outbounds.some((outbound) => outbound.server === '127.0.0.1')).toBe(false);
+        expect(singbox.outbounds.find((outbound) => outbound.tag === 'Auto')?.outbounds).toEqual([
+            'node-a',
+        ]);
+    });
+
     it('only emits default on selector outbounds, not urltest outbounds', () => {
         const singbox = JSON.parse(
             renderSingboxFromTemplateModel({
@@ -263,8 +300,11 @@ describe('Builtin template rule audit', () => {
             type: 'remote',
             format: 'binary',
             url: 'https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@0adeef8a3b9201292f6786ef4de81bcc02e971eb/geosite-category-ads-all.srs',
-            download_detour: DNS_PROXY_GROUP,
         });
+        expect(adsRuleSet.download_detour).toBeUndefined();
+        expect(
+            parsed.route.rule_set.every((ruleSet) => ruleSet.download_detour === undefined)
+        ).toBe(true);
     });
 
     it('applies the local-only listener and split-DNS baseline to template outputs', () => {

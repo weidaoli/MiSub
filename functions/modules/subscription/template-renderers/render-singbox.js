@@ -12,8 +12,22 @@ function parsePort(port) {
     return Number.isFinite(num) ? num : undefined;
 }
 
+function isLoopbackServer(value) {
+    const host = String(value || '')
+        .trim()
+        .replace(/^\[|\]$/g, '')
+        .toLowerCase();
+    return (
+        host === 'localhost' ||
+        host === '::1' ||
+        host === '::' ||
+        host === '0.0.0.0' ||
+        /^127(?:\.|$)/.test(host)
+    );
+}
+
 function buildOutbound(proxy) {
-    if (!proxy || !proxy.server || !proxy.port) return null;
+    if (!proxy || !proxy.server || !proxy.port || isLoopbackServer(proxy.server)) return null;
 
     const type = String(proxy.type || '').toLowerCase();
     const tag = sanitizeTag(proxy.name);
@@ -349,7 +363,6 @@ function buildRuleSets(rules) {
             format: detectRuleSetFormat(rule.value),
             url: pinRemoteRuleUrl(rule.value),
             update_interval: '24h',
-            download_detour: DNS_PROXY_GROUP,
         }));
 
     const implicitRuleSets = [];
@@ -375,7 +388,6 @@ function buildRuleSets(rules) {
                                   `https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-${value}.srs`
                               ),
                     update_interval: '24h',
-                    download_detour: DNS_PROXY_GROUP,
                 });
             }
         }

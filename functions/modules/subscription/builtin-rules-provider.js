@@ -742,7 +742,6 @@ export function getRemoteProviderDefinitions(format, ruleLines) {
                     : 'source',
                 url: pinRemoteRuleUrl(source.singbox),
                 update_interval: '24h',
-                download_detour: DNS_PROXY_GROUP,
             };
         }
     });

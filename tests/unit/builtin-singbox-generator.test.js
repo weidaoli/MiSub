@@ -29,6 +29,28 @@ describe('Built-in Sing-box generator', () => {
         expect(parsed.route.final).toContain('节点选择');
     });
 
+    it('filters loopback subscription-info placeholders from outbounds and policy groups', () => {
+        const result = generateBuiltinSingboxConfig(
+            [
+                'trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#Traffic%20Remaining',
+                'trojan://password@1.2.3.4:443#UsableNode',
+            ].join('\n')
+        );
+        const parsed = JSON.parse(result);
+        const tags = new Set(parsed.outbounds.map((outbound) => outbound.tag));
+
+        expect(tags.has('Traffic Remaining')).toBe(false);
+        expect(parsed.outbounds.some((outbound) => outbound.server === '127.0.0.1')).toBe(false);
+        expect(
+            parsed.outbounds.every(
+                (outbound) =>
+                    !Array.isArray(outbound.outbounds) ||
+                    !outbound.outbounds.includes('Traffic Remaining')
+            )
+        ).toBe(true);
+        expect([...tags].some((tag) => tag.endsWith('UsableNode'))).toBe(true);
+    });
+
     it('should include a tun inbound for sing-box Android client deployment', () => {
         const result = generateBuiltinSingboxConfig('trojan://password@1.2.3.4:443#AndroidNode');
         const parsed = JSON.parse(result);

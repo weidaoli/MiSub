@@ -38,6 +38,20 @@ function parsePort(port) {
     return Number.isFinite(num) ? num : undefined;
 }
 
+function isLoopbackServer(value) {
+    const host = String(value || '')
+        .trim()
+        .replace(/^\[|\]$/g, '')
+        .toLowerCase();
+    return (
+        host === 'localhost' ||
+        host === '::1' ||
+        host === '::' ||
+        host === '0.0.0.0' ||
+        /^127(?:\.|$)/.test(host)
+    );
+}
+
 export function pruneSingboxGroupDependencies(groups, outboundTags) {
     const validTargets = new Set([...outboundTags, 'DIRECT', 'REJECT']);
     let changed = true;
@@ -65,7 +79,7 @@ export function pruneSingboxGroupDependencies(groups, outboundTags) {
 }
 
 function buildOutbound(proxy) {
-    if (!proxy || !proxy.server || !proxy.port) return null;
+    if (!proxy || !proxy.server || !proxy.port || isLoopbackServer(proxy.server)) return null;
 
     const type = (proxy.type || '').toLowerCase();
     const tag = sanitizeName(proxy.name);
