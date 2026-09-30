@@ -74,7 +74,7 @@ export function validateSingboxConfig(config, mode) {
 
     const domestic = array(dns.servers).filter(server => String(server?.tag || '').startsWith('dns-cn-'));
     const foreign = array(dns.servers).filter(server => String(server?.tag || '').startsWith('dns-foreign-'));
-    assert(domestic.length > 0 && domestic.every(server => server.type === 'udp' && server.detour === 'DIRECT'), 'sing-box domestic DNS path is not direct plaintext');
+    assert(domestic.length > 0 && domestic.every(server => server.type === 'udp' && server.detour === undefined), 'sing-box domestic DNS path is not direct plaintext');
     assertDnsMode(foreign.map(server => `${server.type}://${server.server}${server.detour === DNS_PROXY_GROUP ? `#${DNS_PROXY_GROUP}` : ''}`), mode, 'sing-box foreign DNS');
     assert(foreign.every(server => server.detour === DNS_PROXY_GROUP), 'sing-box foreign DNS is not proxied');
 

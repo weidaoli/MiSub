@@ -263,7 +263,8 @@ function parseSingboxResolver(value, tag, detour) {
     const type = parsed.protocol.slice(0, -1);
     const server = parsed.hostname.replace(/^\[|\]$/g, '');
     const serverPort = Number(parsed.port) || (type === 'https' ? 443 : type === 'tls' ? 853 : 53);
-    const result = { tag, type, server, server_port: serverPort, detour };
+    const result = { tag, type, server, server_port: serverPort };
+    if (detour) result.detour = detour;
     if (type === 'https') result.path = parsed.pathname || '/dns-query';
     if (type === 'tls') result.tls = { enabled: true, server_name: server };
     return result;
@@ -274,7 +275,7 @@ export function buildSingboxDnsConfig(raw, options = {}) {
     const proxyGroup = String(options.proxyGroup || DNS_PROXY_GROUP);
     const foreign = policy.mode === DNS_MODES.POLLUTED ? policy.polluted : policy.foreign;
     const domesticServers = policy.domestic.map((value, index) =>
-        parseSingboxResolver(value, `dns-cn-${index + 1}`, 'DIRECT')
+        parseSingboxResolver(value, `dns-cn-${index + 1}`)
     );
     const foreignServers = foreign.map((value, index) =>
         parseSingboxResolver(value, `dns-foreign-${index + 1}`, proxyGroup)

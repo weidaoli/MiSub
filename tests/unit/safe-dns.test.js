@@ -12,6 +12,14 @@ describe('shared split DNS policy', () => {
 
         expect(dns['respect-rules']).toBe(true);
         expect(dns['nameserver-policy']['geosite:cn']).toEqual(['223.5.5.5', '119.29.29.29']);
+        const singbox = buildSingboxDnsConfig('');
+        expect(singbox.servers.filter((server) => server.tag.startsWith('dns-cn-'))).toEqual([
+            { tag: 'dns-cn-1', type: 'udp', server: '223.5.5.5', server_port: 53 },
+            { tag: 'dns-cn-2', type: 'udp', server: '119.29.29.29', server_port: 53 },
+        ]);
+        expect(singbox.servers.find((server) => server.tag === 'dns-foreign-1')?.detour).toBe(
+            DNS_PROXY_GROUP
+        );
         expect(dns.nameserver).toEqual([
             `udp://8.8.8.8:53#${DNS_PROXY_GROUP}`,
             `udp://1.1.1.1:53#${DNS_PROXY_GROUP}`,
